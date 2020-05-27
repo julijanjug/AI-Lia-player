@@ -15,6 +15,8 @@ import numpy as np
 import random
 import math
 
+from hashlib import sha1
+
 from lia.enums import *
 from lia.api import *
 from lia import constants
@@ -36,7 +38,7 @@ lastFood = 0
 pobranih = 0
 a = True
 
-def GetDistanceToWall(unit):
+def GetDistanceToWall(api, unit):
     radians = math.radians(unit["orientationAngle"])
 
     moveY = math.sin(radians)/10
@@ -54,7 +56,11 @@ def GetDistanceToWall(unit):
 
     distanceToObsticle = math_util.distance(unit["x"], unit["y"], x, y)
 
-    #api.say_something(1, str(round(distanceToObsticle, 2)) + "|" + str(round(unit["x"], 2)) + "|" + str(round(unit["y"], 2)) + "|" + str(radians))
+
+    #if unit["id"] == 1:
+    #if distanceToObsticle < 2:
+    api.say_something(unit["id"], str(round(distanceToObsticle, 2)) + "|" + str(round(unit["x"], 2)) + "|" + str(round(unit["y"], 2)) + "|" + str(radians))
+    #print(unit["orientationAngle"], distanceToObsticle)
 
     return distanceToObsticle
 
@@ -74,6 +80,7 @@ def Get_discrete_state_Nabiralec(state):
 
 def GetAction_Nabiralec(discrete_state):
     global NABIRALEC_q_table
+    #print(NABIRALEC_q_table[discrete_state])
     return np.argmax(NABIRALEC_q_table[discrete_state])
 
 
@@ -122,33 +129,34 @@ def GetState_Vojak(unit):
     return speed, rotation, canSeeOponent, orientationToOponent, distanceToOpnonet
 
 
-def GetState_Nabiralec(unit):
+def GetState_Nabiralec(api, unit):
     speed, rotation = GetSpeedRotation(unit)
 
     if len(unit["resourcesInView"]) > 0:
         canSeeResource = 1
+
+        closestResource = unit["resourcesInView"][0]
+        distanceToResource = math_util.distance(unit["x"], unit["y"], closestResource["x"], closestResource["y"])
+
+        for resource in unit["resourcesInView"]:
+            if math_util.distance(unit["x"], unit["y"], resource["x"], resource["y"]) < distanceToResource:
+                closestResource = resource
+                distanceToResource = math_util.distance(unit["x"], unit["y"], closestResource["x"],
+                                                        closestResource["y"])
+
+        orientationToResource = math_util.angle_between_unit_and_point(unit, closestResource["x"], closestResource["y"])
+        distanceToResource = math_util.distance(unit["x"], unit["y"], closestResource["x"], closestResource["y"])
     else:
         canSeeResource = 0
-
-    if canSeeResource == 1:
-        orientationToResource = math_util.angle_between_unit_and_point(unit, unit["resourcesInView"][0]["x"],
-                                                                       unit["resourcesInView"][0]["y"])
-    else:
         orientationToResource = 31
-
-    if canSeeResource == 1:
-        distanceToResource = math_util.distance(unit["x"], unit["y"], unit["resourcesInView"][0]["x"],
-                                                unit["resourcesInView"][0]["y"])
+        distanceToResource = 31
 
         if distanceToResource < 1:
             botWasCloseToFood[unit["id"]] = True
         else:
-            botWasCloseToFood[unit["id"]] = False
+           botWasCloseToFood[unit["id"]] = False
 
-    else:
-        distanceToResource = 31
-
-    distanceToObsticle = GetDistanceToWall(unit)
+    distanceToObsticle = GetDistanceToWall(api, unit)
 
     if distanceToObsticle > 50:
         distanceToObsticle = 50
@@ -165,11 +173,12 @@ def GetReward_Vojak(state):
 
 def GetReward_Nabiralec(api, unit, state):
     #if state[2] == 1:# and unit["id"] == 1:
-    #    print(unit["id"], state)
+    #print(unit["id"], state)
 
     #print(unit["id"], state)
 
-    if state[5] < 2:
+    if state[5] < 5:
+        #api.say_something(unit["id"], "STENAAAAAA")
         #print("BLIZU STENE")
         return -0.5
 
@@ -177,28 +186,28 @@ def GetReward_Nabiralec(api, unit, state):
         #print("NE PREMIKA")
         return -0.5
 
-    if state[0] == 1 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 3:
+    if state[0] == 1 and state[2] == 1 and abs(state[3]) < 22 and state[4] < 3:
         print("NJAM NJAM")
         api.say_something(unit["id"], "FUTER LMAO")
         return 1
     elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 3:
-        return -0.1
+        return -0.01
 
-    elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 6:
+    elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 18 and state[4] < 6:
         print("NJAM")
         api.say_something(unit["id"], "FUTER BLIZO")
         return 0.1
-    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 6:
-        return -0.1
+    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 18 and state[4] < 6:
+        return -0.01
 
-    elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 15:
+    elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 15 and state[4] < 15:
         print("N")
-        api.say_something(unit["id"], "FUTER VIDIM")
+        #api.say_something(unit["id"], "FUTER VIDIM")
         return 0.01
-    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 15:
-        return -0.1
+    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 15 and state[4] < 15:
+        return -0.01
 
-    return 0
+    return -0.05
 
 
 def DoActionVojak(api, unit, action):
@@ -327,11 +336,14 @@ class MyBot(Bot):
                         api.navigation_start(unit["id"], 25, 50)
                         a = False
                     else:
-                        api.navigation_start(unit["id"], 35, 50)
-
-                    #api.set_rotation(unit["id"], "SLOW_RIGHT")
-
-                #GetDistanceToWall(api, unit)
+                        #api.navigation_start(unit["id"], 35, 50)
+                        print(unit["orientationAngle"])
+                        if not(215 < unit["orientationAngle"] < 260):
+                            api.set_rotation(unit["id"], "SLOW_RIGHT")
+                            GetDistanceToWall(api, unit)
+                        else:
+                            api.set_rotation(unit["id"], "NONE")
+                            GetDistanceToWall(api, unit)
                 return
             '''
 
@@ -363,7 +375,9 @@ class MyBot(Bot):
                 DoActionVojak(api, unit, action)
 
             else:
-                stateOfUnit = GetState_Nabiralec(unit)
+                #print(sha1(NABIRALEC_q_table).hexdigest())
+
+                stateOfUnit = GetState_Nabiralec(api, unit)
                 reward = GetReward_Nabiralec(api, unit, stateOfUnit)
 
                 if unit["id"] not in old_discrete_state_of_units.keys():
@@ -382,10 +396,9 @@ class MyBot(Bot):
                 current_q = NABIRALEC_q_table[discrete_state + (action,)]
 
                 new_q = (1 - LEARNING_RATE) * current_q + LEARNING_RATE * (reward + DISCOUNT * max_future_q)
-
                 NABIRALEC_q_table[discrete_state + (action,)] = new_q
-                old_discrete_state_of_units[unit["id"]] = new_discrete_state
 
+                old_discrete_state_of_units[unit["id"]] = new_discrete_state
                 action = GetAction_Nabiralec(new_discrete_state)
                 DoActionNabiralec(api, unit, action)
 
@@ -416,8 +429,8 @@ if __name__ == "__main__":
     VOJAK_OBSERVATION_SPACE_HIGH = np.array([   1+1,    1+1,    1+1,    181+1,      30+1+1])
 
     # Q-Learning settings
-    LEARNING_RATE = 0.1
-    DISCOUNT = 0.85
+    #LEARNING_RATE = 0.05
+    #DISCOUNT = 0.85
 
     VOJAK_discrete_os_win_size = (VOJAK_OBSERVATION_SPACE_HIGH - VOJAK_OBSERVATION_SPACE_LOW) / VOJAK_DISCRETE_OS_SIZE
     #print(VOJAK_discrete_os_win_size)
@@ -444,7 +457,7 @@ if __name__ == "__main__":
     NABIRALEC_OBSERVATION_SPACE_HIGH = np.array([1+1,    1+1,   1+1,        30+1+1,    30+1+1,     50+1])
 
     # Q-Learning settings
-    LEARNING_RATE = 0.1
+    LEARNING_RATE = 0.05
     DISCOUNT = 0.85
 
     NABIRALEC_discrete_os_win_size = (NABIRALEC_OBSERVATION_SPACE_HIGH - NABIRALEC_OBSERVATION_SPACE_LOW) / NABIRALEC_DISCRETE_OS_SIZE
@@ -456,10 +469,16 @@ if __name__ == "__main__":
     else:
         NABIRALEC_q_table = np.random.uniform(low=-2, high=0, size=(NABIRALEC_DISCRETE_OS_SIZE + [NABIRALEC_NUM_OF_ACTIONS]))
 
+    #print(sha1(NABIRALEC_q_table).hexdigest())
 
     asyncio.get_event_loop().run_until_complete(connect(MyBot()))
 
-    print(pobranih)
+    #print(sha1(NABIRALEC_q_table).hexdigest())
+
+    print("pametn:", pobranih)
+
+    with open('Results.txt', 'a') as file:
+        file.write(str(pobranih) + "\n")
 
     np.save("VOJAK_qTable.npy", VOJAK_q_table, allow_pickle=True)
     print("Vojak saved")
