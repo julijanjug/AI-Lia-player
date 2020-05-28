@@ -31,12 +31,55 @@ global NABIRALEC_q_table
 
 botWasCloseToFood = defaultdict(lambda: False)
 global lastFood
+global lastPobranih
 global pobranih
 global a
 
 lastFood = 0
+lastPobranih = 0
 pobranih = 0
 a = True
+
+def FindMaxInArray(arr):
+    vse = []
+
+    last = 0
+
+    for location, value in np.ndenumerate(arr):
+
+        vse.append((location, value))
+
+    print("A", "done")
+
+    arrSorted = sorted(vse, key=lambda x: x[1])
+
+    for i in arrSorted[:100]:
+        print("A", i)
+
+    print("A", "|||||||||||||||")
+
+    for i in arrSorted[-100:]:
+        print("A", i)
+
+def SaveIfBetter(arr, name, newBestScore):
+    if os.path.isfile(name + '_qTable_BEST.npy'):
+        with open(name + '_best_score.txt', 'r') as file:
+            lastBestScore = file.readline()
+
+        print("A", lastBestScore, newBestScore)
+
+        if int(lastBestScore) < int(newBestScore):
+            with open(name + '_best_score.txt', 'w') as file:
+                file.write(str(newBestScore))
+            np.save(name + "_qTable_BEST.npy", arr, allow_pickle=True)
+
+            print("A", name + " new best saved")
+    else:
+        with open(name + '_best_score.txt', 'w') as file:
+            file.write(str(newBestScore))
+        np.save(name + "_qTable_BEST.npy", arr, allow_pickle=True)
+
+
 
 def GetDistanceToWall(api, unit):
     radians = math.radians(unit["orientationAngle"])
@@ -59,8 +102,8 @@ def GetDistanceToWall(api, unit):
 
     #if unit["id"] == 1:
     #if distanceToObsticle < 2:
-    api.say_something(unit["id"], str(round(distanceToObsticle, 2)) + "|" + str(round(unit["x"], 2)) + "|" + str(round(unit["y"], 2)) + "|" + str(radians))
-    #print(unit["orientationAngle"], distanceToObsticle)
+    #api.say_something(unit["id"], str(round(distanceToObsticle, 2)) + "|" + str(round(unit["x"], 2)) + "|" + str(round(unit["y"], 2)) + "|" + str(radians))
+    #print("A", unit["orientationAngle"], distanceToObsticle)
 
     return distanceToObsticle
 
@@ -80,7 +123,7 @@ def Get_discrete_state_Nabiralec(state):
 
 def GetAction_Nabiralec(discrete_state):
     global NABIRALEC_q_table
-    #print(NABIRALEC_q_table[discrete_state])
+    #print("A", NABIRALEC_q_table[discrete_state])
     return np.argmax(NABIRALEC_q_table[discrete_state])
 
 
@@ -151,17 +194,14 @@ def GetState_Nabiralec(api, unit):
         orientationToResource = 31
         distanceToResource = 31
 
-        if distanceToResource < 1:
-            botWasCloseToFood[unit["id"]] = True
-        else:
-           botWasCloseToFood[unit["id"]] = False
-
     distanceToObsticle = GetDistanceToWall(api, unit)
 
     if distanceToObsticle > 50:
         distanceToObsticle = 50
 
     return speed, rotation, canSeeResource, orientationToResource, distanceToResource, distanceToObsticle
+    #(2,        1,      1,      30,                         2,              24,             4)
+    #naprej,    desno,  vidim,  naravnost, proti resourcu,  blizu resourca, dle od stene,   naredim: rotacijo na none
 
 
 def GetReward_Vojak(state):
@@ -172,42 +212,51 @@ def GetReward_Vojak(state):
 
 
 def GetReward_Nabiralec(api, unit, state):
-    #if state[2] == 1:# and unit["id"] == 1:
-    #print(unit["id"], state)
+    #print("A", unit["id"], state, botWasCloseToFood[unit["id"]], lastPobranih, pobranih)
 
-    #print(unit["id"], state)
+    if botWasCloseToFood[unit["id"]] and lastPobranih < pobranih:
+        api.say_something(unit["id"], "FAJN JE BLO")
+        print("A", "NAŽRO SM SE GA KO PRASICA")
+        return 10000
+
+    botWasCloseToFood[unit["id"]] = False
+
+    #if state[2] == 1:# and unit["id"] == 1:
+    #print("A", unit["id"], state)
+
 
     if state[5] < 5:
         #api.say_something(unit["id"], "STENAAAAAA")
-        #print("BLIZU STENE")
-        return -0.5
+        #print("A", "BLIZU STENE")
+        return -50
 
     if state[0] == 0 and state[1] == 0:
-        #print("NE PREMIKA")
-        return -0.5
+        #print("A", "NE PREMIKA")
+        return -50
 
     if state[0] == 1 and state[2] == 1 and abs(state[3]) < 22 and state[4] < 3:
-        print("NJAM NJAM")
+        botWasCloseToFood[unit["id"]] = True
+        print("A", unit["id"], "NJAM NJAM")
         api.say_something(unit["id"], "FUTER LMAO")
-        return 1
-    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 20 and state[4] < 3:
-        return -0.01
+        return 100
+    elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 22 and state[4] < 3:
+        return -1
 
     elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 18 and state[4] < 6:
-        print("NJAM")
+        print("A", "NJAM")
         api.say_something(unit["id"], "FUTER BLIZO")
-        return 0.1
+        return 10
     elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 18 and state[4] < 6:
-        return -0.01
+        return -1
 
     elif state[0] == 1 and state[2] == 1 and abs(state[3]) < 15 and state[4] < 15:
-        print("N")
+        print("A", "N")
         #api.say_something(unit["id"], "FUTER VIDIM")
-        return 0.01
+        return 1
     elif state[0] == 0 and state[2] == 1 and abs(state[3]) < 15 and state[4] < 15:
-        return -0.01
+        return -1
 
-    return -0.05
+    return -5
 
 
 def DoActionVojak(api, unit, action):
@@ -309,17 +358,24 @@ class MyBot(Bot):
         global NABIRALEC_q_table
 
         global lastFood
+        global lastPobranih
         global pobranih
 
         global a
 
-        #print(constants.VIEWING_AREA_LENGTH)
-        #print(constants.VIEWING_AREA_WIDTH)
+        if state["resources"] > lastFood:
+            pobranih += 1
+            print("A", "----------------------------------------------------------------------------", pobranih)
 
-        #print()
-        #print(state["resources"])
-        #print(constants.VIEWING_AREA_LENGTH)
-        #print(constants.VIEWING_AREA_WIDTH)
+
+
+        #print("A", constants.VIEWING_AREA_LENGTH)
+        #print("A", constants.VIEWING_AREA_WIDTH)
+
+        #print("A", )
+        #print("A", state["resources"])
+        #print("A", constants.VIEWING_AREA_LENGTH)
+        #print("A", constants.VIEWING_AREA_WIDTH)
 
         # If you have enough resources to spawn a new warrior unit then spawn it.
         if state["resources"] >= constants.WARRIOR_PRICE:
@@ -337,7 +393,7 @@ class MyBot(Bot):
                         a = False
                     else:
                         #api.navigation_start(unit["id"], 35, 50)
-                        print(unit["orientationAngle"])
+                        print("A", unit["orientationAngle"])
                         if not(215 < unit["orientationAngle"] < 260):
                             api.set_rotation(unit["id"], "SLOW_RIGHT")
                             GetDistanceToWall(api, unit)
@@ -375,7 +431,7 @@ class MyBot(Bot):
                 DoActionVojak(api, unit, action)
 
             else:
-                #print(sha1(NABIRALEC_q_table).hexdigest())
+                #print("A", sha1(NABIRALEC_q_table).hexdigest())
 
                 stateOfUnit = GetState_Nabiralec(api, unit)
                 reward = GetReward_Nabiralec(api, unit, stateOfUnit)
@@ -402,11 +458,8 @@ class MyBot(Bot):
                 action = GetAction_Nabiralec(new_discrete_state)
                 DoActionNabiralec(api, unit, action)
 
-                if state["resources"] > lastFood:
-                    pobranih += 1
-                    print("----------------------------------------------------------------------------", pobranih)
-
-                lastFood = state["resources"]
+        lastPobranih = pobranih
+        lastFood = state["resources"]
 
 
 
@@ -433,10 +486,10 @@ if __name__ == "__main__":
     #DISCOUNT = 0.85
 
     VOJAK_discrete_os_win_size = (VOJAK_OBSERVATION_SPACE_HIGH - VOJAK_OBSERVATION_SPACE_LOW) / VOJAK_DISCRETE_OS_SIZE
-    #print(VOJAK_discrete_os_win_size)
+    #print("A", VOJAK_discrete_os_win_size)
 
     if os.path.isfile('VOJAK_qTable.npy'):
-        print("Vojak loaded")
+        print("A", "Vojak loaded")
         VOJAK_q_table = np.load('VOJAK_qTable.npy', allow_pickle=True)
     else:
         VOJAK_q_table = np.random.uniform(low=-2, high=0, size=(VOJAK_DISCRETE_OS_SIZE + [VOJAK_NUM_OF_ACTIONS]))
@@ -457,31 +510,38 @@ if __name__ == "__main__":
     NABIRALEC_OBSERVATION_SPACE_HIGH = np.array([1+1,    1+1,   1+1,        30+1+1,    30+1+1,     50+1])
 
     # Q-Learning settings
-    LEARNING_RATE = 0.05
-    DISCOUNT = 0.85
+    LEARNING_RATE = 0.01
+    DISCOUNT = 0.01
 
     NABIRALEC_discrete_os_win_size = (NABIRALEC_OBSERVATION_SPACE_HIGH - NABIRALEC_OBSERVATION_SPACE_LOW) / NABIRALEC_DISCRETE_OS_SIZE
-    #print(NABIRALEC_discrete_os_win_size)
+    #print("A", NABIRALEC_discrete_os_win_size)
 
     if os.path.isfile('NABIRALEC_qTable.npy'):
-        print("Nabiralec loaded")
+        print("A", "Nabiralec loaded")
         NABIRALEC_q_table = np.load('NABIRALEC_qTable.npy', allow_pickle=True)
     else:
         NABIRALEC_q_table = np.random.uniform(low=-2, high=0, size=(NABIRALEC_DISCRETE_OS_SIZE + [NABIRALEC_NUM_OF_ACTIONS]))
 
-    #print(sha1(NABIRALEC_q_table).hexdigest())
+    #print("A", sha1(NABIRALEC_q_table).hexdigest())
+
+    #FindMaxInArray(NABIRALEC_q_table)
+    #print("A", "max value in arr pametn:", np.unravel_index(NABIRALEC_q_table.argmax(), NABIRALEC_q_table.shape),
+    #      NABIRALEC_q_table.shape)
+    # print("A", sha1(NABIRALEC_q_table).hexdigest())
 
     asyncio.get_event_loop().run_until_complete(connect(MyBot()))
 
-    #print(sha1(NABIRALEC_q_table).hexdigest())
 
-    print("pametn:", pobranih)
+    print("A", "pametn1:", pobranih)
 
     with open('Results.txt', 'a') as file:
         file.write(str(pobranih) + "\n")
 
     np.save("VOJAK_qTable.npy", VOJAK_q_table, allow_pickle=True)
-    print("Vojak saved")
+    print("A", "Vojak saved")
 
     np.save("NABIRALEC_qTable.npy", NABIRALEC_q_table, allow_pickle=True)
-    print("Nabiralec saved")
+    print("A", "Nabiralec saved")
+
+    SaveIfBetter(VOJAK_q_table, "VOJAK", pobranih)
+    SaveIfBetter(NABIRALEC_q_table, "NABIRALEC", pobranih)
